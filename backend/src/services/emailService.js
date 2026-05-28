@@ -8,29 +8,23 @@ const getTransporter = () => {
 
   transporter = nodemailer.createTransport({
     host: process.env.EMAIL_HOST,
-    port: parseInt(process.env.EMAIL_PORT) || 587,
-    secure: false, // true for port 465
+    port: 465,
+    secure: true,
     auth: {
       user: process.env.EMAIL_USER,
       pass: process.env.EMAIL_PASS,
     },
+    tls: {
+      rejectUnauthorized: false
+    }
   });
 
   return transporter;
 };
 
-/**
- * Send escalation email to the admin with full conversation transcript.
- * @param {object} options
- * @param {string} options.userEmail
- * @param {string} options.unansweredQuestion
- * @param {Array} options.conversationHistory [{role, content, created_at}]
- * @param {string} options.sessionId
- */
 const sendEscalationEmail = async ({ userEmail, unansweredQuestion, conversationHistory, sessionId }) => {
   const mailer = getTransporter();
 
-  // Build HTML transcript
   const transcriptHTML = conversationHistory.map(msg => `
     <div style="margin: 8px 0; padding: 12px; border-radius: 8px; background: ${msg.role === 'user' ? '#f0f4ff' : '#f9fafb'}; border-left: 3px solid ${msg.role === 'user' ? '#4f46e5' : '#10b981'}">
       <strong style="color: ${msg.role === 'user' ? '#4f46e5' : '#10b981'}; text-transform: capitalize;">${msg.role}</strong>
@@ -112,9 +106,6 @@ const sendEscalationEmail = async ({ userEmail, unansweredQuestion, conversation
   return info;
 };
 
-/**
- * Send a confirmation email to the user acknowledging their escalation.
- */
 const sendUserConfirmationEmail = async ({ userEmail, unansweredQuestion }) => {
   const mailer = getTransporter();
 
