@@ -1,38 +1,34 @@
 const nodemailer = require('nodemailer');
 require('dotenv').config();
 
-let transporter = null;
-
-const getTransporter = () => {
-  if (transporter) return transporter;
-
-  transporter = nodemailer.createTransport({
-    host: process.env.EMAIL_HOST,
-    port: parseInt(process.env.EMAIL_PORT) || 587,
-    secure: false,
-    auth: {
-      user: process.env.EMAIL_USER,
-      pass: process.env.EMAIL_PASS,
+const sendBrevoEmail = async ({ to, subject, html, text, replyTo }) => {
+  const response = await fetch('https://api.brevo.com/v3/smtp/email', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'api-key': process.env.BREVO_API_KEY,
     },
+    body: JSON.stringify({
+      sender: { name: 'Support System', email: process.env.ADMIN_EMAIL },
+      to: [{ email: to }],
+      ...(replyTo && { replyTo: { email: replyTo } }),
+      subject,
+      htmlContent: html,
+      textContent: text,
+    }),
   });
 
-  return transporter;
-};
-
-// Test SMTP connection on startup
-getTransporter().verify((error, success) => {
-  if (error) {
-    console.error('[Email] ❌ SMTP connection failed:', error.message);
-    console.error('[Email] Full error:', JSON.stringify(error, null, 2));
-  } else {
-    console.log('[Email] ✅ SMTP server is ready to send emails');
+  if (!response.ok) {
+    const err = await response.text();
+    throw new Error(`Brevo API error: ${err}`);
   }
-});
+
+  console.log(`[Email] ✅ Sent to: ${to}`);
+  return response.json();
+};
 
 const sendEscalationEmail = async ({ userEmail, unansweredQuestion, conversationHistory, sessionId }) => {
   try {
-    const mailer = getTransporter();
-
     const transcriptHTML = conversationHistory.map(msg => `
       <div style="margin: 8px 0; padding: 12px; border-radius: 8px; background: ${msg.role === 'user' ? '#f0f4ff' : '#f9fafb'}; border-left: 3px solid ${msg.role === 'user' ? '#4f46e5' : '#10b981'}">
         <strong style="color: ${msg.role === 'user' ? '#4f46e5' : '#10b981'}; text-transform: capitalize;">${msg.role}</strong>
@@ -67,31 +63,25 @@ const sendEscalationEmail = async ({ userEmail, unansweredQuestion, conversation
       <h1>🚨 Customer Escalation Alert</h1>
       <p>A customer asked a question outside the knowledge base and needs your assistance.</p>
     </div>
-
     <div class="alert-box">
       <strong>⚠️ Action Required:</strong> This customer's question could not be answered from the knowledge base. Please follow up directly.
     </div>
-
     <div class="section">
       <div class="label">Customer Email</div>
       <div class="value"><a href="mailto:${userEmail}" style="color: #4f46e5;">${userEmail}</a></div>
     </div>
-
     <div class="section">
       <div class="label">Unanswered Question</div>
       <div class="question-box">${unansweredQuestion}</div>
     </div>
-
     <div class="section">
       <div class="label">Session ID</div>
       <div class="value" style="font-family: monospace; font-size: 13px;">${sessionId}</div>
     </div>
-
     <div class="section">
       <div class="label">Full Conversation Transcript</div>
       <div class="transcript">${transcriptHTML}</div>
     </div>
-
     <div class="footer">
       This email was sent automatically by your RAG Customer Support System.<br>
       Please reply directly to <a href="mailto:${userEmail}">${userEmail}</a> to assist this customer.
@@ -100,30 +90,24 @@ const sendEscalationEmail = async ({ userEmail, unansweredQuestion, conversation
 </body>
 </html>`;
 
-    const mailOptions = {
-      from: `"Support System" <${process.env.EMAIL_USER}>`,
+    await sendBrevoEmail({
       to: process.env.ADMIN_EMAIL,
-      replyTo: userEmail,
       subject: `🚨 Escalation: "${unansweredQuestion.slice(0, 60)}..." — Customer: ${userEmail}`,
       html,
       text: `Escalation from ${userEmail}\n\nUnanswered Question: ${unansweredQuestion}\n\nConversation:\n${conversationHistory.map(m => `${m.role.toUpperCase()}: ${m.content}`).join('\n\n')}`,
-    };
+      replyTo: userEmail,
+    });
 
-    const info = await mailer.sendMail(mailOptions);
-    console.log(`[Email] ✅ Escalation email sent: ${info.messageId}`);
-    return info;
+    console.log(`[Email] ✅ Escalation email sent to admin`);
 
   } catch (error) {
     console.error('[Email] ❌ Escalation email FAILED:', error.message);
-    console.error('[Email] Full error:', error);
     throw error;
   }
 };
 
 const sendUserConfirmationEmail = async ({ userEmail, unansweredQuestion }) => {
   try {
-    const mailer = getTransporter();
-
     const html = `
 <!DOCTYPE html>
 <html>
@@ -153,18 +137,17 @@ const sendUserConfirmationEmail = async ({ userEmail, unansweredQuestion }) => {
 </body>
 </html>`;
 
-    await mailer.sendMail({
-      from: `"Support Team" <${process.env.EMAIL_USER}>`,
+    await sendBrevoEmail({
       to: userEmail,
       subject: 'We received your question — someone will follow up soon',
       html,
+      text: `Hi, we received your question: "${unansweredQuestion}". Someone will follow up at ${userEmail} within 24 hours.`,
     });
 
     console.log(`[Email] ✅ Confirmation email sent to: ${userEmail}`);
 
   } catch (error) {
     console.error('[Email] ❌ Confirmation email FAILED:', error.message);
-    console.error('[Email] Full error:', error);
     throw error;
   }
 };
