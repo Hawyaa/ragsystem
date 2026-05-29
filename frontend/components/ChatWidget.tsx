@@ -243,7 +243,7 @@ export default function ChatWidget() {
               </button>
             </div>
             <p className="text-center text-xs mt-2" style={{ color: 'var(--text-muted)' }}>
-              Powered by AI · Press Enter to send
+              Press Enter to send
             </p>
           </div>
         </div>
