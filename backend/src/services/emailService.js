@@ -9,7 +9,7 @@ const getTransporter = () => {
   transporter = nodemailer.createTransport({
     host: process.env.EMAIL_HOST,
     port: parseInt(process.env.EMAIL_PORT) || 587,
-    secure: false, // true for port 465
+    secure: false,
     auth: {
       user: process.env.EMAIL_USER,
       pass: process.env.EMAIL_PASS,
@@ -19,27 +19,29 @@ const getTransporter = () => {
   return transporter;
 };
 
-/**
- * Send escalation email to the admin with full conversation transcript.
- * @param {object} options
- * @param {string} options.userEmail
- * @param {string} options.unansweredQuestion
- * @param {Array} options.conversationHistory [{role, content, created_at}]
- * @param {string} options.sessionId
- */
+// Test SMTP connection on startup
+getTransporter().verify((error, success) => {
+  if (error) {
+    console.error('[Email] ❌ SMTP connection failed:', error.message);
+    console.error('[Email] Full error:', JSON.stringify(error, null, 2));
+  } else {
+    console.log('[Email] ✅ SMTP server is ready to send emails');
+  }
+});
+
 const sendEscalationEmail = async ({ userEmail, unansweredQuestion, conversationHistory, sessionId }) => {
-  const mailer = getTransporter();
+  try {
+    const mailer = getTransporter();
 
-  // Build HTML transcript
-  const transcriptHTML = conversationHistory.map(msg => `
-    <div style="margin: 8px 0; padding: 12px; border-radius: 8px; background: ${msg.role === 'user' ? '#f0f4ff' : '#f9fafb'}; border-left: 3px solid ${msg.role === 'user' ? '#4f46e5' : '#10b981'}">
-      <strong style="color: ${msg.role === 'user' ? '#4f46e5' : '#10b981'}; text-transform: capitalize;">${msg.role}</strong>
-      <p style="margin: 4px 0; color: #374151;">${msg.content.replace(/\n/g, '<br>')}</p>
-      ${msg.created_at ? `<small style="color: #9ca3af;">${new Date(msg.created_at).toLocaleString()}</small>` : ''}
-    </div>
-  `).join('');
+    const transcriptHTML = conversationHistory.map(msg => `
+      <div style="margin: 8px 0; padding: 12px; border-radius: 8px; background: ${msg.role === 'user' ? '#f0f4ff' : '#f9fafb'}; border-left: 3px solid ${msg.role === 'user' ? '#4f46e5' : '#10b981'}">
+        <strong style="color: ${msg.role === 'user' ? '#4f46e5' : '#10b981'}; text-transform: capitalize;">${msg.role}</strong>
+        <p style="margin: 4px 0; color: #374151;">${msg.content.replace(/\n/g, '<br>')}</p>
+        ${msg.created_at ? `<small style="color: #9ca3af;">${new Date(msg.created_at).toLocaleString()}</small>` : ''}
+      </div>
+    `).join('');
 
-  const html = `
+    const html = `
 <!DOCTYPE html>
 <html>
 <head>
@@ -98,27 +100,31 @@ const sendEscalationEmail = async ({ userEmail, unansweredQuestion, conversation
 </body>
 </html>`;
 
-  const mailOptions = {
-    from: `"Support System" <${process.env.EMAIL_USER}>`,
-    to: process.env.ADMIN_EMAIL,
-    replyTo: userEmail,
-    subject: `🚨 Escalation: "${unansweredQuestion.slice(0, 60)}..." — Customer: ${userEmail}`,
-    html,
-    text: `Escalation from ${userEmail}\n\nUnanswered Question: ${unansweredQuestion}\n\nConversation:\n${conversationHistory.map(m => `${m.role.toUpperCase()}: ${m.content}`).join('\n\n')}`,
-  };
+    const mailOptions = {
+      from: `"Support System" <${process.env.EMAIL_USER}>`,
+      to: process.env.ADMIN_EMAIL,
+      replyTo: userEmail,
+      subject: `🚨 Escalation: "${unansweredQuestion.slice(0, 60)}..." — Customer: ${userEmail}`,
+      html,
+      text: `Escalation from ${userEmail}\n\nUnanswered Question: ${unansweredQuestion}\n\nConversation:\n${conversationHistory.map(m => `${m.role.toUpperCase()}: ${m.content}`).join('\n\n')}`,
+    };
 
-  const info = await mailer.sendMail(mailOptions);
-  console.log(`[Email] Escalation email sent: ${info.messageId}`);
-  return info;
+    const info = await mailer.sendMail(mailOptions);
+    console.log(`[Email] ✅ Escalation email sent: ${info.messageId}`);
+    return info;
+
+  } catch (error) {
+    console.error('[Email] ❌ Escalation email FAILED:', error.message);
+    console.error('[Email] Full error:', error);
+    throw error;
+  }
 };
 
-/**
- * Send a confirmation email to the user acknowledging their escalation.
- */
 const sendUserConfirmationEmail = async ({ userEmail, unansweredQuestion }) => {
-  const mailer = getTransporter();
+  try {
+    const mailer = getTransporter();
 
-  const html = `
+    const html = `
 <!DOCTYPE html>
 <html>
 <head>
@@ -147,12 +153,20 @@ const sendUserConfirmationEmail = async ({ userEmail, unansweredQuestion }) => {
 </body>
 </html>`;
 
-  await mailer.sendMail({
-    from: `"Support Team" <${process.env.EMAIL_USER}>`,
-    to: userEmail,
-    subject: 'We received your question — someone will follow up soon',
-    html,
-  });
+    await mailer.sendMail({
+      from: `"Support Team" <${process.env.EMAIL_USER}>`,
+      to: userEmail,
+      subject: 'We received your question — someone will follow up soon',
+      html,
+    });
+
+    console.log(`[Email] ✅ Confirmation email sent to: ${userEmail}`);
+
+  } catch (error) {
+    console.error('[Email] ❌ Confirmation email FAILED:', error.message);
+    console.error('[Email] Full error:', error);
+    throw error;
+  }
 };
 
 module.exports = { sendEscalationEmail, sendUserConfirmationEmail };
