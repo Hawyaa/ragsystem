@@ -4,7 +4,7 @@ const { generateRAGResponse, isGreeting } = require('./llm');
 
 // Minimum similarity score to consider a result relevant (0-1)
 // const MIN_RELEVANCE_SCORE = 0.72;
-const MIN_RELEVANCE_SCORE = 0.3;
+const MIN_RELEVANCE_SCORE = 0.72;
 
 // Number of top chunks to retrieve
 const TOP_K = 6;
