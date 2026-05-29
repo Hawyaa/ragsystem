@@ -2,7 +2,7 @@ import type { Metadata } from 'next';
 import './globals.css';
 
 export const metadata: Metadata = {
-  title: 'Support — Powered by AI',
+  title: 'Customer_Support',
   description: 'Intelligent customer support system',
 };
 
